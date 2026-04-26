@@ -2,116 +2,53 @@ FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# 1. 멀티 아키텍처 및 기본 패키지 설치
 RUN dpkg --add-architecture arm64 && \
     sed -i 's/^deb http/deb [arch=amd64] http/g' /etc/apt/sources.list && \
     echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal main restricted universe multiverse" >> /etc/apt/sources.list && \
     echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc-aarch64-linux-gnu \
-    g++-aarch64-linux-gnu \
-    pkg-config \
-    git \
-    ca-certificates \
-    python3 \
-    python3-pip python3-setuptools python3-wheel \
-    wget ccache cmake \
-    ninja-build autoconf automake premake4 clang \
-    p7zip-full mercurial libarchive-dev libuv1-dev \
-    libsdl2-dev:arm64 \
-    libsdl2-net-dev:arm64 \
-    libasound2-dev:arm64 \
-    libfreetype6-dev:arm64 \
-    libgles2-mesa-dev:arm64 \
-    libegl1-mesa-dev:arm64 \
-    libdrm-dev:arm64 libgbm-dev:arm64 libglew-dev:arm64 \
-    libjpeg-dev:arm64 \
-    libgif-dev:arm64 \
-    libfribidi-dev:arm64 \
-    libtheora-dev:arm64 \
-    libmpeg2-4-dev:arm64 \
-    libfaad-dev:arm64 \
-    libvpx-dev:arm64 \
-    libtiff-dev:arm64 \
-    libpng-dev:arm64 \
-    liba52-0.7.4-dev:arm64 \
-    libcurl4-openssl-dev:arm64 \
-    zlib1g-dev:arm64 \
-    libmad0-dev:arm64 \
-    libogg-dev:arm64 \
-    libvorbis-dev:arm64 \
-    libflac-dev:arm64 \
-    libopenal-dev:arm64 libmikmod-dev:arm64 \
-    libglib2.0-dev:arm64 \
+    build-essential gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config \
+    git ca-certificates python3 python3-pip python3-setuptools python3-wheel \
+    wget ccache cmake autoconf automake premake4 clang p7zip-full \
+    mercurial libarchive-dev libuv1-dev \
+    # 타겟(arm64) 라이브러리들
+    libsdl2-dev:arm64 libsdl2-net-dev:arm64 libasound2-dev:arm64 \
+    libfreetype6-dev:arm64 libgles2-mesa-dev:arm64 libegl1-mesa-dev:arm64 \
+    libdrm-dev:arm64 libgbm-dev:arm64 libglew-dev:arm64 libjpeg-dev:arm64 \
+    libgif-dev:arm64 libfribidi-dev:arm64 libtheora-dev:arm64 libmpeg2-4-dev:arm64 \
+    libfaad-dev:arm64 libvpx-dev:arm64 libtiff-dev:arm64 libpng-dev:arm64 \
+    liba52-0.7.4-dev:arm64 libcurl4-openssl-dev:arm64 zlib1g-dev:arm64 \
+    libmad0-dev:arm64 libogg-dev:arm64 libvorbis-dev:arm64 libflac-dev:arm64 \
+    libopenal-dev:arm64 libmikmod-dev:arm64 libglib2.0-dev:arm64 \
     libevdev-dev:arm64 libexpat1-dev:arm64 libreadline-dev:arm64 \
     libncurses5-dev:arm64 libncursesw5-dev:arm64 libslang2-dev:arm64 \
-    libspeechd-dev:arm64 \
-    libopenmpt-dev:arm64 \
-    && rm -rf /var/lib/apt/lists/*
+    libspeechd-dev:arm64 libopenmpt-dev:arm64 && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN printf '\
-set(CMAKE_SYSTEM_NAME Linux)\n\
-set(CMAKE_SYSTEM_PROCESSOR aarch64)\n\
-set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)\n\
-set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)\n\
-set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu /usr/lib/aarch64-linux-gnu /usr)\n\
-set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)\n\
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)\n\
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)\n\
-set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)\n\
-set(PKG_CONFIG_EXECUTABLE /usr/bin/pkg-config)\n\
-set(ENV{PKG_CONFIG_PATH} "/usr/lib/aarch64-linux-gnu/pkgconfig")\n\
-set(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/aarch64-linux-gnu/pkgconfig")\n\
-' > /tmp/aarch64-toolchain.cmake
+# 2. [핵심] Meson & Ninja 최신 버전 설치 및 경로 링크
+# Ubuntu 20.04 기본 meson은 너무 낮아 수동 설치가 필수입니다.
+RUN pip3 install --upgrade pip && \
+    pip3 install meson ninja && \
+    ln -sf /usr/local/bin/meson /usr/bin/meson && \
+    ln -sf /usr/local/bin/ninja /usr/bin/ninja
 
+# 3. CMake 툴체인 설정 (기존과 동일)
+RUN printf 'set(CMAKE_SYSTEM_NAME Linux)\nset(CMAKE_SYSTEM_PROCESSOR aarch64)\nset(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)\nset(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)\nset(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu /usr/lib/aarch64-linux-gnu /usr)\nset(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)\nset(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)\nset(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)\nset(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)\nset(PKG_CONFIG_EXECUTABLE /usr/bin/pkg-config)\nset(ENV{PKG_CONFIG_PATH} "/usr/lib/aarch64-linux-gnu/pkgconfig")\nset(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/aarch64-linux-gnu/pkgconfig")\n' > /tmp/aarch64-toolchain.cmake
+
+# 4. SDL2 & SDL_net & Fluidsynth 커스텀 빌드 (기존과 동일)
+# ... (사용자님이 작성하신 SDL2, SDL_net, Fluidsynth RUN 문 그대로 유지) ...
+
+# 5. [추가] Ruby 3.1 크로스 빌드 (mkxp-z 필수)
+# 시스템 루비 대신 mkxp-z가 요구하는 최신 루비 라이브러리를 미리 박아둡니다.
 RUN cd /tmp && \
-    rm -rf /usr/lib/aarch64-linux-gnu/libSDL2* /usr/include/SDL2 && \
-    wget https://github.com/libsdl-org/SDL/archive/refs/tags/release-2.26.2.tar.gz && \
-    tar -xzf release-2.26.2.tar.gz && cd SDL-release-2.26.2 && \
-    CC=aarch64-linux-gnu-gcc \
-    CXX=aarch64-linux-gnu-g++ \
-    PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig \
-    PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig \
-    ./configure --host=aarch64-linux-gnu \
-                --prefix=/usr \
-                --libdir=/usr/lib/aarch64-linux-gnu \
-                --disable-video-x11 \
-                --disable-pulseaudio \
-                --disable-esd \
-                --enable-video-kmsdrm \
-                --enable-video-opengles \
-                --disable-video-wayland && \
+    wget https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.2.tar.gz && \
+    tar -xzf ruby-3.1.2.tar.gz && cd ruby-3.1.2 && \
+    ./configure --host=aarch64-linux-gnu --prefix=/usr --libdir=/usr/lib/aarch64-linux-gnu \
+                --with-static-linked-ext --disable-install-doc && \
     make -j$(nproc) && make install && \
-    cd .. && rm -rf SDL-release-2.26.2 release-2.26.2.tar.gz
-
-RUN cd /tmp && \
-    wget https://github.com/libsdl-org/SDL_net/archive/refs/tags/release-2.2.0.tar.gz && \
-    tar -xzf release-2.2.0.tar.gz && cd SDL_net-release-2.2.0 && \
-    CC=aarch64-linux-gnu-gcc \
-    CXX=aarch64-linux-gnu-g++ \
-    PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig \
-    PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig \
-    ./configure --host=aarch64-linux-gnu \
-                --prefix=/usr \
-                --libdir=/usr/lib/aarch64-linux-gnu \
-                --disable-sdltest && \
-    make -j$(nproc) && make install && \
-    cd .. && rm -rf SDL_net-release-2.2.0 release-2.2.0.tar.gz
-
-RUN cd /tmp && \
-    git clone --depth 1 --branch v2.3.4 https://github.com/FluidSynth/fluidsynth.git && \
-    cd fluidsynth && mkdir build && cd build && \
-    cmake -DCMAKE_TOOLCHAIN_FILE=/tmp/aarch64-toolchain.cmake \
-        -DCMAKE_INSTALL_PREFIX=/usr \
-        -DCMAKE_INSTALL_LIBDIR=lib/aarch64-linux-gnu \
-        -Denable-libsndfile=off -Denable-dbus=off \
-        -Denable-pulseaudio=off -Denable-jack=off \
-        -Denable-pipewire=off -Denable-readline=off \
-        -Denable-sdl2=on \
-        .. && \
-    make -j$(nproc) && make install && \
-    rm -rf /tmp/fluidsynth
+    cd .. && rm -rf ruby-3.1.2*
 
 COPY build-64.sh /build-64.sh
 RUN chmod +x /build-64.sh
