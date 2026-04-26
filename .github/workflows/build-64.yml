@@ -1,0 +1,91 @@
+name: Build mkxp-z.aarch64
+
+on:
+  workflow_dispatch:
+    inputs:
+      mkxpz_tag:
+        description: 'mkxp-z version or branch (default: master)'
+        default: 'master'
+      debug_enabled:
+        description: 'Enable step debug logging'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  # 이미지를 보관할 GHCR 경로
+  IMAGE: ghcr.io/${{ github.repository_owner }}/mkxpz-builder-64
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. Docker 빌드를 위한 준비
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # 2. Docker 이미지 빌드 및 캐싱 (Dockerfile.64 사용)
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.64  # 사용자님이 작성하신 그 Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.IMAGE }}:cache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:cache,mode=max
+
+      # 3. ccache 복구 (빌드 속도 향상)
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ccache
+          key: ccache-mkxpz-${{ github.sha }}
+          restore-keys: |
+            ccache-mkxpz-
+
+      # 4. Docker 컨테이너 내에서 mkxp-z 빌드 실행
+      - name: Build mkxp-z inside Docker
+        run: |
+          mkdir -p output ccache
+          # Dockerfile의 ENTRYPOINT인 build-64.sh가 실행됩니다.
+          docker run --rm \
+            -e MKXPZ_TAG=${{ github.event.inputs.mkxpz_tag || 'master' }} \
+            -v ${{ github.workspace }}/output:/output \
+            -v ${{ github.workspace }}/ccache:/ccache \
+            -v ${{ github.workspace }}/patches:/patches \
+            ${{ env.IMAGE }}:latest
+
+      # 5. 빌드 결과물(7z) 업로드 (Artifacts 이용)
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkxp-z-aarch64-package
+          path: output/*.7z
+
+      # 6. (선택) Release에 업로드
+      - name: Upload to Release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: "v-build-${{ github.run_number }}"
+        run: |
+          FILE_PATH=$(ls output/mkxp-z.*.7z | head -n 1)
+          if [ -f "$FILE_PATH" ]; then
+            gh release create "$TAG" "$FILE_PATH" --title "Build $TAG" --notes "Automated mkxp-z build" || \
+            gh release upload "$TAG" "$FILE_PATH" --clobber
+          fi
