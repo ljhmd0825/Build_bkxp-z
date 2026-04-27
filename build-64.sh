@@ -77,8 +77,6 @@ meson setup build-aarch64 \
     --cross-file cross_file.meson \
     --buildtype release \
     --prefix="$EMU_DIR" \
-    --wrap-mode=nodownload \
-    -Dworkdir_use_etc=false \
     -Duse_opengl=gles2 \
     -Dshared_ruby=true | tee "$LOGS_DIR/meson_summary.txt"
 
