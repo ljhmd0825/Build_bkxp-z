@@ -25,18 +25,15 @@ jobs:
 
       - name: Install apt dependencies (Strict Focal arm64)
         run: |
-          # 1. 기존 소스 리스트 백업 및 초기화
-          sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak
+          sudo dpkg --add-architecture arm64
           
-          # 2. 호스트(amd64) 소스를 22.04(jammy)로 명확히 지정 (충돌 방지)
+          # 1. 소스 리스트 재구성 (호스트 amd64는 Jammy, 타겟 arm64는 Focal)
           sudo tee /etc/apt/sources.list <<EOF
           deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
           deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
           deb [arch=amd64] http://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
           EOF
 
-          # 3. 타겟(arm64) 소스를 20.04(focal)로 별도 추가
-          sudo dpkg --add-architecture arm64
           sudo tee /etc/apt/sources.list.d/focal-arm64.list <<EOF
           deb [arch=arm64] http://ports.ubuntu.com/ focal main restricted universe multiverse
           deb [arch=arm64] http://ports.ubuntu.com/ focal-updates main restricted universe multiverse
@@ -45,21 +42,17 @@ jobs:
 
           sudo apt update
 
-          # 4. 빌드 도구 설치 (호스트용)
-          sudo apt install git wget build-essential autoconf automake libtool pkg-config ruby bison xxd -y
+          # 2. 필수 빌드 도구 설치
+          sudo apt install git wget build-essential autoconf automake libtool pkg-config ruby bison xxd python3-pip -y
+          sudo pip3 install meson ninja
 
-          # 5. CMake 최신화
-          wget https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-linux-x86_64.tar.gz
-          tar -zxf cmake-3.26.4-linux-x86_64.tar.gz
-          sudo cp -r cmake-3.26.4-linux-x86_64/bin/* /usr/bin/
-          sudo cp -r cmake-3.26.4-linux-x86_64/share/* /usr/share/
-
-          # 6. 크로스 컴파일러 설치 (호스트용)
+          # 3. 크로스 컴파일러 설치
           sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu -y
 
-          # 7. 타겟 라이브러리 설치 (arm64용)
-          # 'it is not going to be installed' 에러 방지를 위해 필요한 패키지를 명시적으로 나열
-          sudo apt install \
+          # 4. 타겟 라이브러리 설치 (libc6-dev:arm64를 선두에 배치하여 의존성 해결 강제)
+          sudo apt install -y \
+            libc6:arm64 \
+            libc6-dev:arm64 \
             libexpat1-dev:arm64 \
             zlib1g-dev:arm64 \
             libbz2-dev:arm64 \
@@ -81,9 +74,10 @@ jobs:
             libxkbfile-dev:arm64 \
             libxpm-dev:arm64 \
             libxxf86vm-dev:arm64 \
+            libfontconfig1-dev:arm64 \
+            libfreetype6-dev:arm64 \
             x11proto-dev \
-            xtrans-dev \
-            -y
+            xtrans-dev
      
       - name: Build everything else
         run: |
