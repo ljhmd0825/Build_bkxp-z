@@ -6,19 +6,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
-
     container:
-      # 사용자님의 빌더 이미지 (확인 완료)
       image: ghcr.io/${{ github.repository_owner }}/mkxpz-builder-64:latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      # 1. mkxp-z 공식 소스를 'mkxp-z' 폴더로 클론
       - name: Checkout mkxp-z Source
         uses: actions/checkout@v4
         with:
@@ -26,19 +20,51 @@ jobs:
           submodules: recursive
           path: 'mkxp-z'
 
-      # 2. 의존성 빌드 (공식 소스 내부의 linux 폴더로 진입)
-      - name: Build Dependencies
+      - name: Build Dependencies (Correct Cross-Compile)
         working-directory: ./mkxp-z/linux
         run: |
-          make
+          # 1. 크로스 컴파일 환경 변수 강제 주입
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CC=${CROSS_COMPILE}gcc
+          export CXX=${CROSS_COMPILE}g++
+          export AR=${CROSS_COMPILE}ar
+          export RANLIB=${CROSS_COMPILE}ranlib
+          
+          # 2. 빌드 결과물이 저장될 경로 설정 (Main Build에서 참조할 위치)
+          export INSTALL_PREFIX=$GITHUB_WORKSPACE/mkxp-z/linux/build-aarch64
+          mkdir -p $INSTALL_PREFIX
 
-      # 3. 메인 빌드 (AArch64 크로스 빌드)
-      - name: Main Build
+          # 3. ogg 빌드 (순차 빌드 강제 및 크로스 호스트 명시)
+          cd downloads/x86_64/ogg
+          ./autogen.sh
+          ./configure --host=aarch64-linux-gnu --prefix=$INSTALL_PREFIX --disable-shared
+          make -j1 install
+          
+          # 4. vorbis 빌드 (ogg 경로를 명시하여 인식 문제 해결)
+          cd ../vorbis
+          mkdir -p cmakebuild && cd cmakebuild
+          cmake .. \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DCMAKE_C_COMPILER=${CC} \
+            -DCMAKE_CXX_COMPILER=${CXX} \
+            -DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX \
+            -DOGG_LIBRARY=$INSTALL_PREFIX/lib/libogg.a \
+            -DOGG_INCLUDE_DIR=$INSTALL_PREFIX/include \
+            -DBUILD_SHARED_LIBS=OFF
+          make -j1 install
+
+      - name: Main Build (Using Toolchain File)
         working-directory: ./mkxp-z
         run: |
           rm -rf build
-          # 도커파일 5번 단계에서 생성된 툴체인 파일 경로 활용
-          meson setup build --cross-file /usr/local/share/aarch64-cross.txt --prefix=$GITHUB_WORKSPACE/dist
+          # 라이브러리 경로를 meson이 찾을 수 있도록 PKG_CONFIG_PATH 보정
+          export PKG_CONFIG_LIBDIR=$GITHUB_WORKSPACE/mkxp-z/linux/build-aarch64/lib/pkgconfig
+          
+          meson setup build \
+            --cross-file /usr/local/share/aarch64-cross.txt \
+            --prefix=$GITHUB_WORKSPACE/dist \
+            -Dlink_static=true
           ninja -C build install
 
       - name: Archive Result
