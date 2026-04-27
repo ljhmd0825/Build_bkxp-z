@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig
 ENV PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
 
-# 1. 아키텍처 추가 및 기본 저장소 최적화 (amd64는 메인, arm64는 ports 사용)
+# 1. 수정된 패키지 설치 부분
 RUN dpkg --add-architecture arm64 && \
     sed -i 's/^deb http/deb [arch=amd64] http/g' /etc/apt/sources.list && \
     echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal main restricted universe multiverse" >> /etc/apt/sources.list && \
@@ -14,10 +14,10 @@ RUN dpkg --add-architecture arm64 && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config \
+    # [수정] libtool과 automake 추가
+    libtool automake \
     git wget ca-certificates bison xxd python3-pip gettext \
-    # 호스트 루비 (루비 빌드 도중 'id.h' 등을 생성할 때 필수)
     ruby ruby-dev \
-    # 타겟(arm64) 최소 의존성 라이브러리들
     zlib1g-dev:arm64 libexpat1-dev:arm64 libssl-dev:arm64 \
     libglib2.0-dev:arm64 libpixman-1-dev:arm64 && \
     rm -rf /var/lib/apt/lists/*
