@@ -28,7 +28,6 @@ RUN dpkg --add-architecture arm64 && \
     libevdev-dev:arm64 libexpat1-dev:arm64 libreadline-dev:arm64 \
     libncurses5-dev:arm64 libncursesw5-dev:arm64 libslang2-dev:arm64 \
     libspeechd-dev:arm64 libopenmpt-dev:arm64 && \
-    libsdl2-sound-dev:arm64 \
     rm -rf /var/lib/apt/lists/*
 
 # 2. Meson & Ninja 최신화 (시스템 빌드용)
