@@ -16,6 +16,7 @@ RUN dpkg --add-architecture arm64 && \
     # 호스트용 루비 (빌드 스크립트 실행용 도구로만 사용)
     ruby bison \
     # 타겟(arm64) 개발 라이브러리들
+    libphysfs-dev:arm64 \
     libsdl2-dev:arm64 libsdl2-net-dev:arm64 libasound2-dev:arm64 \
     libfreetype6-dev:arm64 libgles2-mesa-dev:arm64 libegl1-mesa-dev:arm64 \
     libdrm-dev:arm64 libgbm-dev:arm64 libglew-dev:arm64 libjpeg-dev:arm64 \
