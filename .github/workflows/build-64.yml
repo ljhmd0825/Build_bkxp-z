@@ -11,7 +11,7 @@ jobs:
       packages: read
 
     container:
-      # 사용자님이 지정하신 정확한 패키지명 'mkxpz-builder-64'를 적용했습니다.
+      # 사용자님이 확인해주신 실제 패키지명
       image: ghcr.io/${{ github.repository_owner }}/mkxpz-builder-64:latest
       credentials:
         username: ${{ github.actor }}
@@ -20,16 +20,20 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Build Dependencies
+        # 컨테이너 환경에서는 상대 경로로 접근하는 것이 가장 안전합니다.
         run: |
           cd linux
-          # Dockerfile 내부의 autoconf 2.71 환경을 활용
           make -j$(nproc)
 
       - name: Main Build (mkxp-z)
         run: |
-          # Dockerfile 5번 단계에서 생성된 툴체인 파일 경로
+          # build 폴더 정리 후 meson 실행
+          rm -rf build
+          # 도커파일에 박혀있는 툴체인 경로 사용
           meson setup build --cross-file /usr/local/share/aarch64-cross.txt --prefix=$GITHUB_WORKSPACE/dist
           ninja -C build install
 
