@@ -65,14 +65,13 @@ endian = 'little'
 pkg_config_libdir = '/usr/lib/aarch64-linux-gnu/pkgconfig'
 EOF
 
-# 4. Meson 빌드 설정 (mkxp-z에 없는 옵션 모두 제거)
-# mkxp-z는 기본적으로 시스템 라이브러리를 자동 탐색합니다.
+# 4. Meson 빌드 설정 (서브모듈 강제 모드)
 rm -rf build-aarch64
 meson setup build-aarch64 \
     --cross-file ../cross_file.meson \
     --buildtype release \
     --prefix="$EMU_DIR" \
-    --wrap-mode=nodownload \
+    --wrap-mode=forcefallback \  # 시스템 무시, 무조건 내부 서브모듈 사용
     --strip | tee "$LOGS_DIR/meson_summary.txt"
 
 # 5. 빌드 및 설치
