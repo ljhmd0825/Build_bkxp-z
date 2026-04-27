@@ -18,6 +18,29 @@ echo "=== Building mkxp-z for aarch64 (Subprojects Mode) ==="
 if [ ! -d "mkxp-z" ]; then
     git clone --recursive https://github.com/mkxp-z/mkxp-z.git mkxp-z
 fi
+
+# 1-1. [추가] SDL2_sound 수동 크로스 빌드 (시스템에 없으므로 직접 생성)
+if [ ! -d "SDL2_sound" ]; then
+    echo "=== Building SDL2_sound for aarch64 ==="
+    git clone https://github.com/icculus/SDL2_sound.git
+    cd SDL2_sound
+    mkdir build-cross && cd build-cross
+    
+    # CMake를 이용한 크로스 빌드 (우리가 설치한 aarch64 도구 활용)
+    cmake .. \
+        -DCMAKE_SYSTEM_NAME=Linux \
+        -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+        -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+        -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+        -DCMAKE_INSTALL_PREFIX=/usr/lib/aarch64-linux-gnu \
+        -DSDLSOUND_BUILD_STATIC=ON \
+        -DSDLSOUND_BUILD_SHARED=ON
+    
+    make -j$(nproc)
+    make install  # Docker 내부의 arm64 라이브러리 경로로 강제 설치
+    cd ../..
+fi
+
 cd mkxp-z
 
 # 2. Meson 크로스 파일 생성 (상위 디렉토리에 생성)
