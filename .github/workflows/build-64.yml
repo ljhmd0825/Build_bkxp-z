@@ -30,7 +30,7 @@ jobs:
       - name: Build Dependencies
         working-directory: ./mkxp-z/linux
         run: |
-          make -j$(nproc)
+          make
 
       # 3. 메인 빌드 (AArch64 크로스 빌드)
       - name: Main Build
