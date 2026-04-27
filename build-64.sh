@@ -71,14 +71,14 @@ endian = 'little'
 pkg_config_libdir = '/usr/lib/aarch64-linux-gnu/pkgconfig'
 EOF
 
-# 4. Meson 빌드 설정
+# 4. Meson 빌드 설정 (mkxp-z 전용 옵션으로 수정)
 rm -rf build-aarch64
 meson setup build-aarch64 \
     --cross-file cross_file.meson \
     --buildtype release \
     --prefix="$EMU_DIR" \
-    -Duse_opengl=gles2 \
-    -Dshared_ruby=true | tee "$LOGS_DIR/meson_summary.txt"
+    -Dshared_ruby=true \
+    -Dstatic_libphysfs=true | tee "$LOGS_DIR/meson_summary.txt"
 
 # 5. 빌드 및 설치
 ninja -C build-aarch64
