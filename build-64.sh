@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-# 0. 경로 설정
+# 0. 경로 및 환경 설정
 export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+export GIT_TERMINAL_PROMPT=0  # Git 인증 대기 차단
 
 # 환경 설정
 OUTPUT_DIR="${OUTPUT_DIR:-/output}"
@@ -12,38 +13,22 @@ LOGS_DIR="$OUTPUT_DIR/logs"
 
 mkdir -p "$LOGS_DIR"
 
-echo "=== Building mkxp-z for aarch64 (Subprojects Mode) ==="
+echo "=== Preparing mkxp-z with SDL2_sound Subproject ==="
 
-# 1. 소스 체크아웃 (이미 있다면 건너뜀)
+# 1. mkxp-z 소스 체크아웃
 if [ ! -d "mkxp-z" ]; then
     git clone --recursive https://github.com/mkxp-z/mkxp-z.git mkxp-z
 fi
-
-# 1-1. [추가] SDL2_sound 수동 크로스 빌드 (시스템에 없으므로 직접 생성)
-if [ ! -d "SDL2_sound" ]; then
-    echo "=== Building SDL2_sound for aarch64 ==="
-    git clone https://github.com/icculus/SDL2_sound.git
-    cd SDL2_sound
-    mkdir build-cross && cd build-cross
-    
-    # CMake를 이용한 크로스 빌드 (우리가 설치한 aarch64 도구 활용)
-    cmake .. \
-        -DCMAKE_SYSTEM_NAME=Linux \
-        -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-        -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-        -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-        -DCMAKE_INSTALL_PREFIX=/usr/lib/aarch64-linux-gnu \
-        -DSDLSOUND_BUILD_STATIC=ON \
-        -DSDLSOUND_BUILD_SHARED=ON
-    
-    make -j$(nproc)
-    make install  # Docker 내부의 arm64 라이브러리 경로로 강제 설치
-    cd ../..
-fi
-
 cd mkxp-z
 
-# 2. Meson 크로스 파일 생성 (상위 디렉토리에 생성)
+# 2. [핵심] SDL2_sound를 subprojects에 강제 주입
+# 시스템에 없으므로, Meson이 스스로 빌드할 수 있게 소스를 서브프로젝트로 옮깁니다.
+if [ ! -d "subprojects/SDL2_sound" ]; then
+    echo "--- Fetching SDL2_sound as a subproject ---"
+    git clone https://github.com/icculus/SDL2_sound.git subprojects/SDL2_sound
+fi
+
+# 3. Meson 크로스 파일 생성 (상위 디렉토리 기준)
 cat <<EOF > ../cross_file.meson
 [binaries]
 c = 'aarch64-linux-gnu-gcc'
@@ -62,8 +47,9 @@ endian = 'little'
 pkg_config_libdir = '/usr/lib/aarch64-linux-gnu/pkgconfig'
 EOF
 
-# 3. Meson 빌드 설정
-# 줄바꿈 에러를 방지하기 위해 배열 형태로 인자를 전달하거나 한 줄로 구성합니다.
+# 4. Meson 빌드 설정 (수동 옵션 없이 최적화)
+# --wrap-mode=forcefallback을 주면, Meson이 방금 넣어둔 subprojects/SDL2_sound를 발견하고
+# 알아서 aarch64용으로 같이 빌드해버립니다.
 rm -rf build-aarch64
 meson setup build-aarch64 \
     --cross-file ../cross_file.meson \
@@ -72,21 +58,22 @@ meson setup build-aarch64 \
     --wrap-mode=forcefallback \
     --strip | tee "$LOGS_DIR/meson_summary.txt"
 
-# 4. 빌드 및 설치
+# 5. 빌드 및 설치
 ninja -C build-aarch64
 ninja -C build-aarch64 install
 
-# 5. 라이브러리 수집
+# 6. 라이브러리 수집
 echo "=== Collecting shared libraries ==="
 mkdir -p "$LIB_DIR"
-# 서브모듈로 빌드할 경우 라이브러리 파일명이 달라질 수 있으니 확인이 필요합니다.
-LIBS=("libSDL2-2.0.so.0" "libSDL2_net-2.0.so.0" "libfluidsynth.so.3")
+# 빌드된 결과물에서 SDL2_sound도 찾아야 합니다.
+cp -P build-aarch64/subprojects/SDL2_sound/libSDL2_sound* "$LIB_DIR/" 2>/dev/null || true
 
+LIBS=("libSDL2-2.0.so.0" "libSDL2_net-2.0.so.0" "libfluidsynth.so.3" "libphysfs.so.1")
 for lib in "${LIBS[@]}"; do
     TARGET=$(find /usr/lib/aarch64-linux-gnu -name "$lib*" -print -quit)
     [ -n "$TARGET" ] && cp -L "$TARGET" "$LIB_DIR/$lib"
 done
 
-# 6. 패키징
+# 7. 패키징
 cd "$OUTPUT_DIR"
 7z a -t7z -m0=lzma2 -mx=9 "mkxp-z.aarch64.$(date +%m%d).7z" Emu/ lib/ logs/
