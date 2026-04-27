@@ -6,28 +6,33 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Dockerfile로 빌드한 실제 이미지 주소를 여기에 적으세요.
-    # 예: ghcr.io/사용자명/이미지명:latest
+    permissions:
+      contents: read
+      packages: read
+    
     container:
-      image: ghcr.io/${{ github.repository_owner }}/mkxp-z-builder:latest
+      # 주소를 변수 없이 직접 박아서 오타나 파싱 에러를 방지합니다.
+      image: ghcr.io/ljhmd0825/mkxp-z-builder:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Checkout Source
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build Dependencies
         run: |
           cd linux
-          # 도커에 이미 autoconf 2.71 등이 다 있으니 그냥 밀어붙입니다.
           make -j$(nproc)
 
-      - name: Main Build (mkxp-z)
+      - name: Main Build
         run: |
-          # 도커파일 5번 단계에서 생성한 크로스 파일을 그대로 꽂아넣습니다.
+          # 도커파일에 정의된 경로 그대로 호출
           meson setup build --cross-file /usr/local/share/aarch64-cross.txt --prefix=$GITHUB_WORKSPACE/dist
           ninja -C build install
 
-      - name: Archive Result
+      - name: Archive
         uses: actions/upload-artifact@v4
         with:
           name: mkxp-z-arm64
