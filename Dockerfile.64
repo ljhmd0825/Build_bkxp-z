@@ -11,7 +11,7 @@ RUN dpkg --add-architecture arm64 && \
     apt-get install -y --no-install-recommends \
     build-essential gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config \
     git ca-certificates python3 python3-pip python3-setuptools python3-wheel \
-    wget ccache cmake autoconf automake premake4 clang p7zip-full \
+    wget ccache cmake autoconf automake premake4 clang p7zip-full xxd \
     mercurial libarchive-dev libuv1-dev \
     # 호스트용 루비 (빌드 스크립트 실행용 도구로만 사용)
     ruby bison \
