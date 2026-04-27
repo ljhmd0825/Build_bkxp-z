@@ -13,34 +13,36 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Checkout mkxp-z Source
+      - name: Checkout Source (Include Submodules)
         uses: actions/checkout@v4
         with:
           repository: 'mkxp-z/mkxp-z'
-          submodules: recursive
+          submodules: recursive # 이미 여기서 모든 소스가 준비됩니다.
           path: 'mkxp-z'
 
-      - name: Build Dependencies (Correct Cross-Compile)
+      - name: Build Dependencies (Cross-Compile)
         working-directory: ./mkxp-z/linux
         run: |
-          # 1. 크로스 컴파일 환경 변수 강제 주입
+          # 1. 크로스 컴파일러 고정
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=${CROSS_COMPILE}gcc
           export CXX=${CROSS_COMPILE}g++
           export AR=${CROSS_COMPILE}ar
           export RANLIB=${CROSS_COMPILE}ranlib
           
-          # 2. 빌드 결과물이 저장될 경로 설정 (Main Build에서 참조할 위치)
-          export INSTALL_PREFIX=$GITHUB_WORKSPACE/mkxp-z/linux/build-aarch64
+          # 2. 타겟 경로 설정 (공식 Makefile의 경로 구조 존중)
+          export INSTALL_PREFIX=$GITHUB_WORKSPACE/mkxp-z/linux/build-x86_64
           mkdir -p $INSTALL_PREFIX
 
-          # 3. ogg 빌드 (순차 빌드 강제 및 크로스 호스트 명시)
+          # 3. 별도 다운로드 없이 이미 체크아웃된 서브모듈 경로에서 순차 빌드
+          
+          # [Ogg 빌드] - 병렬 빌드 금지, 크로스 호스트 명시
           cd downloads/x86_64/ogg
           ./autogen.sh
           ./configure --host=aarch64-linux-gnu --prefix=$INSTALL_PREFIX --disable-shared
-          make -j1 install
+          make -j1 install 
           
-          # 4. vorbis 빌드 (ogg 경로를 명시하여 인식 문제 해결)
+          # [Vorbis 빌드] - Ogg가 설치된 후에 실행
           cd ../vorbis
           mkdir -p cmakebuild && cd cmakebuild
           cmake .. \
@@ -52,14 +54,13 @@ jobs:
             -DOGG_LIBRARY=$INSTALL_PREFIX/lib/libogg.a \
             -DOGG_INCLUDE_DIR=$INSTALL_PREFIX/include \
             -DBUILD_SHARED_LIBS=OFF
-          make -j1 install
+          make -j$(nproc) install
 
-      - name: Main Build (Using Toolchain File)
+      - name: Main Build
         working-directory: ./mkxp-z
         run: |
           rm -rf build
-          # 라이브러리 경로를 meson이 찾을 수 있도록 PKG_CONFIG_PATH 보정
-          export PKG_CONFIG_LIBDIR=$GITHUB_WORKSPACE/mkxp-z/linux/build-aarch64/lib/pkgconfig
+          export PKG_CONFIG_LIBDIR=$GITHUB_WORKSPACE/mkxp-z/linux/build-x86_64/lib/pkgconfig
           
           meson setup build \
             --cross-file /usr/local/share/aarch64-cross.txt \
@@ -70,5 +71,5 @@ jobs:
       - name: Archive Result
         uses: actions/upload-artifact@v4
         with:
-          name: mkxp-z-arm64
+          name: mkxp-z-aarch64
           path: dist/
