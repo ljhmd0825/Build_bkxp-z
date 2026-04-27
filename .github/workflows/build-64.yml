@@ -1,91 +1,94 @@
-name: Build mkxp-z.aarch64
+name: Manual Build
 
 on:
   workflow_dispatch:
-    inputs:
-      mkxpz_tag:
-        description: 'mkxp-z version or branch (default: master)'
-        default: 'master'
-      debug_enabled:
-        description: 'Enable step debug logging'
-        required: false
-        type: boolean
-        default: false
-
-permissions:
-  contents: write
-  packages: write
-
-env:
-  # 이미지를 보관할 GHCR 경로
-  IMAGE: ghcr.io/${{ github.repository_owner }}/mkxpz-builder-64
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-linux-arm64:
+    name: Build for Linux arm64 (Ubuntu 20.04 Base)
+    runs-on: ubuntu-22.04
     steps:
+      - uses: benjlevesque/short-sha@v2.2
+        id: short-sha
+        with:
+          length: 7
+
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      # 1. Docker 빌드를 위한 준비
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: actions/cache@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
+          path: |
+            linux/build-arm64
+            linux/downloads
+          key: lin-focal-arm64-${{ hashFiles('linux/Makefile', 'linux/target*', 'linux/toolchain*') }}
 
-      # 2. Docker 이미지 빌드 및 캐싱 (Dockerfile.64 사용)
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.64  # 사용자님이 작성하신 그 Dockerfile
-          push: true
-          tags: ${{ env.IMAGE }}:latest
-          cache-from: type=registry,ref=${{ env.IMAGE }}:cache
-          cache-to: type=registry,ref=${{ env.IMAGE }}:cache,mode=max
-
-      # 3. ccache 복구 (빌드 속도 향상)
-      - name: Restore ccache
-        uses: actions/cache@v4
-        with:
-          path: ccache
-          key: ccache-mkxpz-${{ github.sha }}
-          restore-keys: |
-            ccache-mkxpz-
-
-      # 4. Docker 컨테이너 내에서 mkxp-z 빌드 실행
-      - name: Build mkxp-z inside Docker
+      - name: Install apt dependencies (Ubuntu 20.04 Focal)
         run: |
-          mkdir -p output ccache
-          # Dockerfile의 ENTRYPOINT인 build-64.sh가 실행됩니다.
-          docker run --rm \
-            -e MKXPZ_TAG=${{ github.event.inputs.mkxpz_tag || 'master' }} \
-            -v ${{ github.workspace }}/output:/output \
-            -v ${{ github.workspace }}/ccache:/ccache \
-            -v ${{ github.workspace }}/patches:/patches \
-            ${{ env.IMAGE }}:latest
+          # 1. 아키텍처 설정
+          sudo sed -i "s/deb /deb [arch=amd64] /g" /etc/apt/sources.list
+          sudo dpkg --add-architecture arm64
+          
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal main restricted" | sudo tee -a /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-updates main restricted" | sudo tee -a /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal universe" | sudo tee -a /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-updates universe" | sudo tee -a /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-backports main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+          
+          sudo apt update
+          
+          # 2. 기본 빌드 도구 설치
+          sudo apt install git wget build-essential autoconf automake libtool pkg-config ruby bison xxd -y
+          
+          # 3. CMake 최신화 (20.04 기본 버전 대신 3.26 설치)
+          wget https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-linux-x86_64.tar.gz
+          tar -zxf cmake-3.26.4-linux-x86_64.tar.gz
+          sudo cp -r cmake-3.26.4-linux-x86_64/bin/* /usr/bin/
+          sudo cp -r cmake-3.26.4-linux-x86_64/share/* /usr/share/
 
-      # 5. 빌드 결과물(7z) 업로드 (Artifacts 이용)
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mkxp-z-aarch64-package
-          path: output/*.7z
+          # 4. 타겟 라이브러리 설치 (arm64 전용)
+          sudo apt install libfontenc-dev:arm64 libfs-dev:arm64 libice-dev:arm64 libsm-dev:arm64 \
+                       libx11-dev:arm64 libxau-dev:arm64 libxaw7-dev:arm64 libxcomposite-dev:arm64 \
+                       libxcursor-dev:arm64 libxdamage-dev:arm64 libxdmcp-dev:arm64 libxext-dev:arm64 \
+                       libxfixes-dev:arm64 libxfont-dev:arm64 libxft-dev:arm64 libxi-dev:arm64 \
+                       libxinerama-dev:arm64 libxkbfile-dev:arm64 libxmu-dev:arm64 libxmuu-dev:arm64 \
+                       libxpm-dev:arm64 libxrandr-dev:arm64 libxrender-dev:arm64 libxres-dev:arm64 \
+                       libxss-dev:arm64 libxt-dev:arm64 libxtst-dev:arm64 libxv-dev:arm64 \
+                       libxvmc-dev:arm64 libxxf86dga-dev:arm64 libxxf86vm-dev:arm64 x11proto-dev:arm64 \
+                       xserver-xorg-dev:arm64 xtrans-dev:arm64 libexpat1-dev:arm64 -y
+          
+          # 5. 크로스 컴파일러 설치
+          sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+                       zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 \
+                       libasound2-dev:arm64 libpulse-dev:arm64 -y
 
-      # 6. (선택) Release에 업로드
-      - name: Upload to Release
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: "v-build-${{ github.run_number }}"
+      - name: Build everything else
         run: |
-          FILE_PATH=$(ls output/mkxp-z.*.7z | head -n 1)
-          if [ -f "$FILE_PATH" ]; then
-            gh release create "$TAG" "$FILE_PATH" --title "Build $TAG" --notes "Automated mkxp-z build" || \
-            gh release upload "$TAG" "$FILE_PATH" --clobber
-          fi
+          cd linux
+          source target-arm64.sh
+          make
+
+      - name: Build executable
+        run: |
+          source linux/target-arm64.sh
+          source linux/vars.sh
+          meson setup --cross-file linux/$ARCH_MESON_TOOLCHAIN build --bindir=. --prefix=$GITHUB_WORKSPACE/build/local
+          cd build
+          ninja
+          ninja install
+          cp "$MKXPZ_PREFIX/lib/$(aarch64-linux-gnu-objdump -p local/mkxp-z* | grep -i NEEDED | grep -Eo 'libruby.so.[0-9\.]+')" local/lib*/ || true
+          cp "/usr/lib/aarch64-linux-gnu/$(aarch64-linux-gnu-objdump -p local/lib*/libruby.so* | grep -i NEEDED | grep -Eo 'libcrypt.so.[0-9\.]+')" local/lib*/ || true
+
+      - name: Prepare archive
+        run: |
+          cd build/local
+          cp -r ../../linux/build-arm64/lib/ruby/3.1.0 . || true
+          mv ./3.1.0 ./stdlib || true
+          cp ../../mkxp.json .
+          cp -r ../../scripts .
+          cp ../../assets/LICENSE.mkxp-z-with-https.txt .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mkxp-z.linux.arm64.manual-${{steps.short-sha.outputs.sha}}
+          path: build/local
