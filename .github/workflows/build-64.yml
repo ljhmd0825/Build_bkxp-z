@@ -9,10 +9,10 @@ jobs:
     permissions:
       contents: read
       packages: read
-    
+
     container:
-      # github.repository_owner를 써서 대소문자 및 유저명 문제를 원천 차단합니다.
-      image: ghcr.io/${{ github.repository_owner }}/mkxp-z-builder:latest
+      # 사용자님이 지정하신 정확한 패키지명 'mkxpz-builder-64'를 적용했습니다.
+      image: ghcr.io/${{ github.repository_owner }}/mkxpz-builder-64:latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -24,12 +24,12 @@ jobs:
       - name: Build Dependencies
         run: |
           cd linux
-          # Dockerfile에 이미 빌드 도구(autoconf 2.71 등)가 다 있으니 바로 실행
+          # Dockerfile 내부의 autoconf 2.71 환경을 활용
           make -j$(nproc)
 
       - name: Main Build (mkxp-z)
         run: |
-          # Dockerfile 5번에서 생성한 툴체인 파일 경로 그대로 사용
+          # Dockerfile 5번 단계에서 생성된 툴체인 파일 경로
           meson setup build --cross-file /usr/local/share/aarch64-cross.txt --prefix=$GITHUB_WORKSPACE/dist
           ninja -C build install
 
