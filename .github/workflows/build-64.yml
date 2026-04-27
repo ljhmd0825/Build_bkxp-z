@@ -23,11 +23,12 @@ jobs:
             linux/downloads
           key: lin-focal-arm64-${{ hashFiles('linux/Makefile', 'linux/target*', 'linux/toolchain*') }}
 
-      - name: Install apt dependencies (Strict Focal arm64)
+      - name: Install apt dependencies (Strict Focal arm64 Pinning)
         run: |
           sudo dpkg --add-architecture arm64
           
-          # 1. 소스 리스트 재구성 (호스트 amd64는 Jammy, 타겟 arm64는 Focal)
+          # 1. 아키텍처별 저장소 분리 설정
+          # 호스트(amd64)는 Jammy(22.04), 타겟(arm64)은 Focal(20.04)로 고정
           sudo tee /etc/apt/sources.list <<EOF
           deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
           deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
@@ -40,17 +41,32 @@ jobs:
           deb [arch=arm64] http://ports.ubuntu.com/ focal-security main restricted universe multiverse
           EOF
 
+          # 2. Apt Pinning 설정: arm64 패키지는 무조건 Focal 저장소를 우선하도록 강제
+          sudo tee /etc/apt/preferences.d/focal-arm64-pin <<EOF
+          Package: *:arm64
+          Pin: release n=focal
+          Pin-Priority: 900
+
+          Package: *:arm64
+          Pin: release n=focal-updates
+          Pin-Priority: 900
+
+          Package: *:arm64
+          Pin: release n=focal-security
+          Pin-Priority: 900
+          EOF
+
           sudo apt update
 
-          # 2. 필수 빌드 도구 설치
-          sudo apt install git wget build-essential autoconf automake libtool pkg-config ruby bison xxd python3-pip -y
+          # 3. 필수 빌드 도구 설치 (호스트 amd64용)
+          sudo apt install -y git wget build-essential autoconf automake libtool pkg-config ruby bison xxd python3-pip
           sudo pip3 install meson ninja
 
-          # 3. 크로스 컴파일러 설치
-          sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu -y
+          # 4. 크로스 컴파일러 설치
+          sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-          # 4. 타겟 라이브러리 설치 (libc6-dev:arm64를 선두에 배치하여 의존성 해결 강제)
-          sudo apt install -y \
+          # 5. 타겟 라이브러리 설치 (Pinning과 allow-downgrades로 의존성 해결)
+          sudo apt install -y --allow-downgrades \
             libc6:arm64 \
             libc6-dev:arm64 \
             libexpat1-dev:arm64 \
@@ -78,34 +94,39 @@ jobs:
             libfreetype6-dev:arm64 \
             x11proto-dev \
             xtrans-dev
-     
-      - name: Build everything else
+
+      - name: Build dependencies
         run: |
           cd linux
+          # Makefile 내 OpenAL 버전을 1.22.2로 미리 수정했어야 함
           source target-arm64.sh
-          make
+          make -j$(nproc)
 
       - name: Build executable
         run: |
           source linux/target-arm64.sh
           source linux/vars.sh
+          # 크로스 컴파일 설정 파일 경로 확인 필요 (linux/ 폴더 내에 있는지)
           meson setup --cross-file linux/$ARCH_MESON_TOOLCHAIN build --bindir=. --prefix=$GITHUB_WORKSPACE/build/local
           cd build
           ninja
           ninja install
+          # 런타임 공유 라이브러리 복사
           cp "$MKXPZ_PREFIX/lib/$(aarch64-linux-gnu-objdump -p local/mkxp-z* | grep -i NEEDED | grep -Eo 'libruby.so.[0-9\.]+')" local/lib*/ || true
           cp "/usr/lib/aarch64-linux-gnu/$(aarch64-linux-gnu-objdump -p local/lib*/libruby.so* | grep -i NEEDED | grep -Eo 'libcrypt.so.[0-9\.]+')" local/lib*/ || true
 
       - name: Prepare archive
         run: |
           cd build/local
+          # Ruby 표준 라이브러리 및 설정 파일 준비
           cp -r ../../linux/build-arm64/lib/ruby/3.1.0 . || true
           mv ./3.1.0 ./stdlib || true
-          cp ../../mkxp.json .
-          cp -r ../../scripts .
-          cp ../../assets/LICENSE.mkxp-z-with-https.txt .
+          cp ../../mkxp.json . || true
+          cp -r ../../scripts . || true
+          cp ../../assets/LICENSE.mkxp-z-with-https.txt . || true
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: mkxp-z.linux.arm64.manual-${{steps.short-sha.outputs.sha}}
+          name: mkxp-z.linux.arm64.manual-${{ steps.short-sha.outputs.sha }}
           path: build/local
