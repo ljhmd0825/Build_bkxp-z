@@ -15,7 +15,7 @@ RUN dpkg --add-architecture arm64 && \
     apt-get install -y --no-install-recommends \
     build-essential gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config \
     # [수정] libtool과 automake 추가
-    libtool automake \
+    libtool libtool-bin automake \
     git wget ca-certificates bison xxd python3-pip gettext \
     ruby ruby-dev \
     zlib1g-dev:arm64 libexpat1-dev:arm64 libssl-dev:arm64 \
