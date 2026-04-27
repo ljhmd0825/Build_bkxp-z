@@ -72,13 +72,12 @@ pkg_config_libdir = '/usr/lib/aarch64-linux-gnu/pkgconfig'
 EOF
 
 # 4. Meson 빌드 설정
-# -Dworkdir_use_etc=false: 설정 파일을 /etc가 아닌 실행파일 근처에서 찾게 함
-# -Duse_opengl=gles2: TrimUI 등 임베디드 기기에 필수
 rm -rf build-aarch64
 meson setup build-aarch64 \
     --cross-file cross_file.meson \
     --buildtype release \
     --prefix="$EMU_DIR" \
+    --wrap-mode=nodownload \
     -Dworkdir_use_etc=false \
     -Duse_opengl=gles2 \
     -Dshared_ruby=true | tee "$LOGS_DIR/meson_summary.txt"
