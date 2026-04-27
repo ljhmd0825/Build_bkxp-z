@@ -6,26 +6,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 컨테이너 필드에서 secrets는 직접 호출이 불가능하므로 직접 이미지 주소를 적거나 
-    # 아래와 같이 환경 변수를 거쳐야 합니다.
+    # Dockerfile로 빌드한 실제 이미지 주소를 여기에 적으세요.
+    # 예: ghcr.io/사용자명/이미지명:latest
     container:
       image: ghcr.io/${{ github.repository_owner }}/mkxp-z-builder:latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Source
         uses: actions/checkout@v4
 
       - name: Build Dependencies
         run: |
           cd linux
+          # 도커에 이미 autoconf 2.71 등이 다 있으니 그냥 밀어붙입니다.
           make -j$(nproc)
 
       - name: Main Build (mkxp-z)
         run: |
+          # 도커파일 5번 단계에서 생성한 크로스 파일을 그대로 꽂아넣습니다.
           meson setup build --cross-file /usr/local/share/aarch64-cross.txt --prefix=$GITHUB_WORKSPACE/dist
           ninja -C build install
 
-      - name: Archive
+      - name: Archive Result
         uses: actions/upload-artifact@v4
         with:
           name: mkxp-z-arm64
